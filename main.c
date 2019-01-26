@@ -6,6 +6,9 @@
 #include <pru_hmc5883l_driver.h>
 #include <MPU6050.h>
 #include <pru_mpu6050_driver.h>
+#include <ecap.h>
+#include <pru_ecap.h>
+#include <edma.h>
 
 /**
  * main.c
@@ -20,6 +23,7 @@ uint32_t counter = 0;
 #define MPU_SENSOR_NUM          0
 #define COMPASS_SENSOR_NUM      1
 #define BAROMETER_SENSOR_NUM    2
+#define RC_SENSOR_NUM           3
 
 uint32_t active_sensors = 0;
 uint8_t testConnectionOk = 0;
@@ -40,6 +44,12 @@ int main(void)
     testConnectionOk = pru_mpu6050_driver_TestConnection();
     while (1)
     {
+        // Reset Ecap interrupt
+        if (CT_ECAP.ECFLG & 0x0002)
+        {
+            CT_ECAP.ECCLR |= ECCLR_MSK; // remove EVT4 interrupt and INT
+        } else
+
         // receive message from PRU0
         if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1<<INT_P0_TO_P1))
         {
@@ -56,6 +66,18 @@ int main(void)
                 active_sensors &= ~(1 << MPU_SENSOR_NUM);
                 break;
             }
+            case RC_ENABLE_MSG_TYPE: {
+                ecap_Init();
+                edma_Init();
+                ecap_Start();
+                active_sensors |= (1 << RC_SENSOR_NUM);
+                break;
+            }
+            case RC_DISABLE_MSG_TYPE: {
+                ecap_Stop();
+                active_sensors &= ~(1 << RC_SENSOR_NUM);
+                break;
+            }
             }
             // TODO: interpret message
         }
@@ -68,6 +90,13 @@ int main(void)
         {
             // TODO: read data from compass
             // TODO: send data to pru0
+        }
+        else if (active_sensors & (1 << RC_SENSOR_NUM))
+        {
+            // TODO: read data from buffer
+            // TODO: send data to pru0
+            uint32_t* buffer = edma_get_Data();
+
         }
         else if (active_sensors & (1 << MPU_SENSOR_NUM))
         {
