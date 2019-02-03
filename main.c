@@ -25,11 +25,24 @@ uint32_t counter = 0;
 #define BAROMETER_SENSOR_NUM    2
 #define RC_SENSOR_NUM           3
 
+#define INT_ECAP       15
+#define INT_ECAP_CHAN  8
+#define INT_ECAP_HOST  8
+
 uint32_t active_sensors = 0;
 uint8_t testConnectionOk = 0;
 
+//uint32_t* CM_PER_PWMCSS_CLKCTRL[3] = { (uint32_t*) 0x44E000D4,
+//                                       (uint32_t*) 0x44E000CC,
+//                                       (uint32_t*) 0x44E000D8 };
+//uint32_t* PWMSS_CTRL_REG = (uint32_t*) 0x44E10664;
+//uint32_t* ECAP_CTRL_PIN = (uint32_t*) 0x44E10964;
+
+
 int main(void)
 {
+    CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
+
     /* Clear the status of the registers that will be used in this programs
      * As they have been un-serviced in the last software tun
      */
@@ -38,6 +51,18 @@ int main(void)
 
     CT_INTC.EISR_bit.EN_SET_IDX = INT_P0_TO_P1; // enable interrupt from PRU0
     CT_INTC.EISR_bit.EN_SET_IDX = INT_P1_TO_P0;
+    CT_INTC.CMR3_bit.CH_MAP_15 = INT_ECAP_CHAN;
+    CT_INTC.HMR2_bit.HINT_MAP_8 = INT_ECAP_HOST;
+    CT_INTC.HIER_bit.EN_HINT |= 0x8;
+    CT_INTC.EISR_bit.EN_SET_IDX = INT_ECAP; // enable ecap interrupt
+    CT_INTC.GER_bit.EN_HINT_ANY = 1; // enable host interrupts
+    /*
+     * per prova. Da togliere
+     */
+    ecap_Init();
+    edma_Init();
+    ecap_Start();
+
 
     // TODO: gestire multiple istanze mpu e su canali i2c differenti
     uint8_t i2cInit = pru_i2c_driver_Init(2);

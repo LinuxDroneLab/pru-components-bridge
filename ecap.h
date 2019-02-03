@@ -11,7 +11,7 @@
 
 #define ECCTL1_CFG       0xC1EE /* DIV1,ENABLED,DELTA_MODE, RISING/FALLING */
 #define ECCTL2_CFG       0x00DE /* RE-ARM, ECAP_MODE, RUN, SYNCO/I DISABLED, CONTINUOUS */
-#define ECEINT_CFG       0x0000 /* none */
+#define ECEINT_CFG       0x0002 /* EVT1 */
 #define ECFLG_MSK        0x00FF /* none */
 #define ECCLR_MSK        0x00FF /* clear all */
 #define EC_STOP_MSK      0xFFEF /* stop ecap */
