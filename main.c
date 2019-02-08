@@ -51,6 +51,7 @@ int main(void)
 
     CT_INTC.EISR_bit.EN_SET_IDX = INT_P0_TO_P1; // enable interrupt from PRU0
     CT_INTC.EISR_bit.EN_SET_IDX = INT_P1_TO_P0;
+
     CT_INTC.CMR3_bit.CH_MAP_15 = INT_ECAP_CHAN;
     CT_INTC.HMR2_bit.HINT_MAP_8 = INT_ECAP_HOST;
     CT_INTC.HIER_bit.EN_HINT |= 0x8;
