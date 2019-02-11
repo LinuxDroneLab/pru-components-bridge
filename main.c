@@ -19,7 +19,9 @@ volatile register uint32_t __R31;
 
 unsigned char pru0_data[sizeof(PrbMessageType)] = { '\0' };
 PrbMessageType* pru0_data_struct = (PrbMessageType*) pru0_data;
-uint32_t counter = 0;
+uint8_t counter8 = 0;
+uint8_t currRcChannel = 0;
+uint8_t found = 0;
 
 #define MPU_SENSOR_NUM          0
 #define COMPASS_SENSOR_NUM      1
@@ -49,7 +51,7 @@ int main(void)
 {
     volatile uint32_t *ptr = EDMA0_CC_BASE;
     uint32_t edmaChannelMask = (1 << EDMA3CC_ECAP0_EVT);
-    uint32_t counter = 0;
+    uint32_t* ecapData;
 
     CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
@@ -80,8 +82,8 @@ int main(void)
     testConnectionOk = pru_mpu6050_driver_TestConnection();
     while (1)
     {
-        BUFF_DEBUG[0] = (uint32_t)(&ptr[DRAE1]);
-        BUFF_DEBUG[1] = (uint32_t)(&CT_TCC.TCC_DRAE[1].DRAE);
+        BUFF_DEBUG[0] = 1;
+        BUFF_DEBUG[1] = 2;
 
         // Reset Ecap interrupt
         if (CT_ECAP.ECFLG & 0x0002)
@@ -91,20 +93,31 @@ int main(void)
         // EDMA completion interrupt
         if (ptr[IPR] & edmaChannelMask)
         {
-            BUFF_DEBUG[3] = counter++;
+            ecap_Stop();
             ptr[ICR] = edmaChannelMask; // reset completion interrupt
-            uint8_t stopped = ecap_Stop();
-            // TODO: transfer data
             edma_reset_Data();
             edma_init_PaRAM();
-            (*PRU_CTRL) |= PRU_CTRL_CTR_EN; // enable cycle counter
-        }
-        else
-        // Se sono passati 100 millis attivo ECAP per ricevere RC
-        if(((*PRU_CTRL) & PRU_CTRL_CTR_EN) && ((*PRU_CYCLE) >= 20000000)) { // il counter è abilitato e sono passati 100 millis
-            (*PRU_CTRL) &= ~(PRU_CTRL_CTR_EN); // disable cycle counter
+            ecapData = edma_get_Data();
+            found = 0;
+            for(counter8 = 0; counter8 < NUM_EDMA_FRAME_BLOCK; counter8++) {
+                if((found == 0) && (ecapData[counter8] > 400000)) {
+                    found = 1;
+                }
+                if(found == 1) {
+                    if(ecapData[counter8] > 70000) {
+                        if(ecapData[counter8] > 400000) {
+                            currRcChannel = 0;
+                        }
+                        RC_BUFFER[currRcChannel] = ecapData[counter8];
+                        currRcChannel++;
+                        if(currRcChannel > 8) {
+                            currRcChannel = 0;
+                            break;
+                        }
+                    }
+                }
+            }
             ecap_Start();
-            BUFF_DEBUG[2] = *PRU_CYCLE;
         }
         else
         // receive message from PRU0

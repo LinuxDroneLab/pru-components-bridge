@@ -9,6 +9,8 @@
 #ifndef EDMA_H_
 #define EDMA_H_
 
+#define NUM_EDMA_FRAME_BLOCK 64
+
 #define EDMA0_CC_BASE   ((volatile uint32_t *)(0x49000000))
 #define CM_PER_BASE     ((volatile uint32_t *)(0x44E00000))
 #define TPTC0_CLKCTRL (0x24 / 4)

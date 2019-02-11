@@ -121,8 +121,8 @@ typedef struct {
     uint32_t TCC_EEVAL;                         // 0x320 - 0x323
     uint32_t rsvd07[7];                         // 0x324 - 0x33F
     volatile struct {
-        volatile uint32_t DRAE;
-        volatile uint32_t DRAEH;
+        uint32_t DRAE;
+        uint32_t DRAEH;
     } TCC_DRAE[8];                              // 0x340 - 0x37F
     uint64_t TCC_QRAE[8];                       // 0x380 - 0x3BF
     uint32_t rsvd08[16];                        // 0x3C0 - 0x3FF
