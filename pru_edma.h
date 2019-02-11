@@ -109,7 +109,7 @@ typedef struct {
         } TCC_QUEPRI_bit;
     };  // 0x284 - 0x287
 
-    uint32_t rsvd06[6];                         // 0x288 - 0x29F
+    uint32_t rsvd06[30];                        // 0x288 - 0x2FF
     uint32_t TCC_EMR;                           // 0x300 - 0x303
     uint32_t TCC_EMRH;                          // 0x304 - 0x307
     uint32_t TCC_EMCR;                          // 0x308 - 0x30B
@@ -119,8 +119,11 @@ typedef struct {
     uint32_t TCC_CCERR;                         // 0x318 - 0x31B
     uint32_t TCC_CCERRCLR;                      // 0x31C - 0x31F
     uint32_t TCC_EEVAL;                         // 0x320 - 0x323
-    uint32_t rsvd07[16];                        // 0x324 - 0x33F
-    uint64_t TCC_DRAE[8];                       // 0x340 - 0x37F
+    uint32_t rsvd07[7];                         // 0x324 - 0x33F
+    volatile struct {
+        volatile uint32_t DRAE;
+        volatile uint32_t DRAEH;
+    } TCC_DRAE[8];                              // 0x340 - 0x37F
     uint64_t TCC_QRAE[8];                       // 0x380 - 0x3BF
     uint32_t rsvd08[16];                        // 0x3C0 - 0x3FF
     uint32_t TCC_Q0E[16];                       // 0x400 - 0x43F
@@ -248,11 +251,6 @@ typedef struct {
 
 } pruTptc;
 
-volatile __far pruTcc CT_TCC __attribute__((cregister("TPCC", near), peripheral));
-volatile __far pruTptc CT_TPTC0 __attribute__((cregister("TPTC0", near), peripheral));
-volatile __far pruTptc CT_TPTC1 __attribute__((cregister("TPTC1", near), peripheral));
-volatile __far pruTptc CT_TPTC2 __attribute__((cregister("TPTC2", near), peripheral));
-
 #define EDMA_BASE_ADDRESS      0x49000000
 #define EDMA_0_PARAM           0x49004000
 
@@ -293,7 +291,9 @@ typedef struct {
     uint32_t rsvd     : 16;
 } EDMA_PaRAM_STRUCT;
 
-EDMA_PaRAM_STRUCT* EDMA_PaRAM = (EDMA_PaRAM_STRUCT*)EDMA_0_PARAM;
-
+volatile __far pruTcc CT_TCC __attribute__((cregister("TPCC", near), peripheral));
+volatile __far pruTptc CT_TPTC0 __attribute__((cregister("TPTC0", near), peripheral));
+volatile __far pruTptc CT_TPTC1 __attribute__((cregister("TPTC1", near), peripheral));
+volatile __far pruTptc CT_TPTC2 __attribute__((cregister("TPTC2", near), peripheral));
 
 #endif /* PRU_EDMA_H_ */

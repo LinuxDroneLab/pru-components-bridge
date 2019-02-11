@@ -9,6 +9,7 @@
 #include <ecap.h>
 #include <pru_ecap.h>
 #include <edma.h>
+#include <pru_edma.h>
 
 /**
  * main.c
@@ -38,9 +39,18 @@ uint8_t testConnectionOk = 0;
 //uint32_t* PWMSS_CTRL_REG = (uint32_t*) 0x44E10664;
 //uint32_t* ECAP_CTRL_PIN = (uint32_t*) 0x44E10964;
 
+#define PRU_CTRL_CTR_EN 0x8
+uint32_t* PRU_CTRL = (uint32_t*)0x00024000;
+uint32_t* PRU_CYCLE = (uint32_t*)0x0002400C;
+uint32_t BUFF_DEBUG[4] = {0};
+uint32_t RC_BUFFER[9] = {0};
 
 int main(void)
 {
+    volatile uint32_t *ptr = EDMA0_CC_BASE;
+    uint32_t edmaChannelMask = (1 << EDMA3CC_ECAP0_EVT);
+    uint32_t counter = 0;
+
     CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
     /* Clear the status of the registers that will be used in this programs
@@ -54,52 +64,78 @@ int main(void)
 
     CT_INTC.CMR3_bit.CH_MAP_15 = INT_ECAP_CHAN;
     CT_INTC.HMR2_bit.HINT_MAP_8 = INT_ECAP_HOST;
-    CT_INTC.HIER_bit.EN_HINT |= 0x8;
+    CT_INTC.HIER_bit.EN_HINT |= 0x8; // enable host interrupt 8
     CT_INTC.EISR_bit.EN_SET_IDX = INT_ECAP; // enable ecap interrupt
-    CT_INTC.GER_bit.EN_HINT_ANY = 1; // enable host interrupts
+    CT_INTC.GER_bit.EN_HINT_ANY = 1; // enable all host interrupt
+
     /*
-     * per prova. Da togliere
+     * Forzo RC attivo
      */
     ecap_Init();
     edma_Init();
     ecap_Start();
-
 
     // TODO: gestire multiple istanze mpu e su canali i2c differenti
     uint8_t i2cInit = pru_i2c_driver_Init(2);
     testConnectionOk = pru_mpu6050_driver_TestConnection();
     while (1)
     {
+        BUFF_DEBUG[0] = (uint32_t)(&ptr[DRAE1]);
+        BUFF_DEBUG[1] = (uint32_t)(&CT_TCC.TCC_DRAE[1].DRAE);
+
         // Reset Ecap interrupt
         if (CT_ECAP.ECFLG & 0x0002)
         {
             CT_ECAP.ECCLR |= ECCLR_MSK; // remove EVT4 interrupt and INT
-        } else
-
+        }
+        // EDMA completion interrupt
+        if (ptr[IPR] & edmaChannelMask)
+        {
+            BUFF_DEBUG[3] = counter++;
+            ptr[ICR] = edmaChannelMask; // reset completion interrupt
+            uint8_t stopped = ecap_Stop();
+            // TODO: transfer data
+            edma_reset_Data();
+            edma_init_PaRAM();
+            (*PRU_CTRL) |= PRU_CTRL_CTR_EN; // enable cycle counter
+        }
+        else
+        // Se sono passati 100 millis attivo ECAP per ricevere RC
+        if(((*PRU_CTRL) & PRU_CTRL_CTR_EN) && ((*PRU_CYCLE) >= 20000000)) { // il counter è abilitato e sono passati 100 millis
+            (*PRU_CTRL) &= ~(PRU_CTRL_CTR_EN); // disable cycle counter
+            ecap_Start();
+            BUFF_DEBUG[2] = *PRU_CYCLE;
+        }
+        else
         // receive message from PRU0
-        if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1<<INT_P0_TO_P1))
+        if (CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << INT_P0_TO_P1))
         {
             CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1;
             __xin(SP_BANK_0, 3, 0, pru0_data);
-            switch(pru0_data_struct->message_type) {
-            case MPU_ENABLE_MSG_TYPE: {
+            switch (pru0_data_struct->message_type)
+            {
+            case MPU_ENABLE_MSG_TYPE:
+            {
                 pru_mpu6050_driver_Initialize();
                 active_sensors |= (1 << MPU_SENSOR_NUM);
                 break;
             }
-            case MPU_DISABLE_MSG_TYPE: {
+            case MPU_DISABLE_MSG_TYPE:
+            {
                 // TODO: eseguire stop del sensore
                 active_sensors &= ~(1 << MPU_SENSOR_NUM);
                 break;
             }
-            case RC_ENABLE_MSG_TYPE: {
+            case RC_ENABLE_MSG_TYPE:
+            {
                 ecap_Init();
                 edma_Init();
                 ecap_Start();
                 active_sensors |= (1 << RC_SENSOR_NUM);
                 break;
             }
-            case RC_DISABLE_MSG_TYPE: {
+            case RC_DISABLE_MSG_TYPE:
+            {
                 ecap_Stop();
                 active_sensors &= ~(1 << RC_SENSOR_NUM);
                 break;
@@ -107,24 +143,28 @@ int main(void)
             }
             // TODO: interpret message
         }
-        else if (active_sensors & (1 << BAROMETER_SENSOR_NUM))
+        else
+        if (active_sensors & (1 << BAROMETER_SENSOR_NUM))
         {
             // TODO: read data from baro
             // TODO: send data to pru0
         }
-        else if (active_sensors & (1 << COMPASS_SENSOR_NUM))
+        else
+        if (active_sensors & (1 << COMPASS_SENSOR_NUM))
         {
             // TODO: read data from compass
             // TODO: send data to pru0
         }
-        else if (active_sensors & (1 << RC_SENSOR_NUM))
+        else
+        if (active_sensors & (1 << RC_SENSOR_NUM))
         {
             // TODO: read data from buffer
             // TODO: send data to pru0
             uint32_t* buffer = edma_get_Data();
 
         }
-        else if (active_sensors & (1 << MPU_SENSOR_NUM))
+        else
+        if (active_sensors & (1 << MPU_SENSOR_NUM))
         {
             // TODO: Inserire interrupt invece di leggere via i2c
             if (pru_mpu6050_driver_GetIntDataReadyStatus())
@@ -141,7 +181,7 @@ int main(void)
                 // send data to PRU0
                 __xout(SP_BANK_1, 6, 0, pru0_data);
                 // send interrupt to P0
-                CT_INTC.SRSR0_bit.RAW_STS_31_0 |= (1<<INT_P1_TO_P0);
+                CT_INTC.SRSR0_bit.RAW_STS_31_0 |= (1 << INT_P1_TO_P0);
             }
         }
     }
