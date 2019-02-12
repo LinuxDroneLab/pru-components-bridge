@@ -9,18 +9,28 @@
 #ifndef _RC_RECEIVER_H_
 #define _RC_RECEIVER_H_
 
+/*********************
+ * INTC DEFINITIONS
+ *********************/
+#define INT_ECAP       15
+#define INT_ECAP_CHAN  8
+#define INT_ECAP_HOST  8
+uint8_t rc_receiver_intc_Init();
+
 /********************
  * ECAP DEFINITIONS
  ********************/
-#define ECCTL1_CFG       0xC1EE /* DIV1,ENABLED,DELTA_MODE, RISING/FALLING */
-#define ECCTL2_CFG       0x00DE /* RE-ARM, ECAP_MODE, RUN, SYNCO/I DISABLED, CONTINUOUS */
-#define ECEINT_CFG       0x0002 /* EVT1 interrupt enabled */
-#define ECCLR_MSK        0x00FF /* clear all */
-#define EC_STOP_MSK      0xFFEF /* mask stop ecap */
+#define ECCTL1_CFG          0xC1EE /* DIV1,ENABLED,DELTA_MODE, RISING/FALLING */
+#define ECCTL2_CFG          0x00DE /* RE-ARM, ECAP_MODE, RUN, SYNCO/I DISABLED, CONTINUOUS */
+#define ECEINT_CFG          0x0002 /* EVT1 interrupt enabled */
+#define ECCLR_MSK           0x00FF /* clear all */
+#define EC_STOP_MSK         0xFFEF /* mask stop ecap */
+#define MAX_PULSE_CYCLES    70000
+#define MAX_CHANNEL_CYCLES  400000
 
-uint8_t ecap_Init();
-uint8_t ecap_Start();
-uint8_t ecap_Stop();
+uint8_t rc_receiver_ecap_Init();
+uint8_t rc_receiver_ecap_Start();
+uint8_t rc_receiver_ecap_Stop();
 
 /*******************
  * EDMA DEFINITIONS
@@ -56,11 +66,10 @@ uint8_t ecap_Stop();
 #define IECR            (0x2258 / 4)
 #define IECRH           (0x225C / 4)
 
-uint8_t edma_Init();
-uint8_t edma_init_PaRAM();
-uint32_t* edma_get_Data();
-void edma_reset_Data();
-
+uint8_t   rc_receiver_edma_Init();
+uint8_t   rc_receiver_edma_init_PaRAM();
+uint32_t* rc_receiver_edma_get_Data();
+void      rc_receiver_switch_edma_Buffer();
 
 /**************************
  * RC RECEIVER DEFINITIONS
@@ -69,8 +78,10 @@ void edma_reset_Data();
 #define RC_RECEIVER_TX_COMPLETE    0x1
 
 uint8_t rc_receiver_Init();
+void    rc_receiver_clean_Interrupts();
 uint8_t rc_receiver_Start();
 uint8_t rc_receiver_Stop();
 uint8_t rc_receiver_PulseNewData();
+void    rc_receiver_extract_Data(uint32_t* rc_buffer);
 
 #endif /* _RC_RECEIVER_H_ */

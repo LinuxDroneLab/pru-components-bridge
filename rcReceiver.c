@@ -5,6 +5,7 @@
  *      Author: andrea
  */
 #include <stdint.h>
+#include <pru_intc.h>
 #include <pru_ecap.h>
 #include <pru_edma.h>
 #include <rcReceiver.h>
@@ -22,17 +23,22 @@ char* DATA_MEMORY_BASE_ADDRESS = (char*)0x4A300000;
 #endif
 #endif
 
-volatile uint32_t *edma_registers_ptr = EDMA0_CC_BASE;
-uint32_t edma_channel_mask = (1 << EDMA3CC_ECAP0_EVT);
-
 // ping/pong buffers for Capture PPM signals
 uint32_t FRAME_TO_TRANSFER[2][NUM_EDMA_FRAME_BLOCK] = { 0 };
 uint8_t rc_receiver_ReadBufferIdx = 0;
 uint8_t rc_receiver_WriteBufferIdx = 1;
 uint8_t rc_receiver_TmpBufferIdx = 0;
-uint8_t rc_receiver_Counter8 = 0;
 
-uint8_t ecap_Init() {
+// variables
+volatile uint32_t *_edma_registers_ptr = EDMA0_CC_BASE;
+uint32_t _edma_channel_mask = (1 << EDMA3CC_ECAP0_EVT);
+uint8_t _rc_receiver_counter8 = 0;
+uint8_t _rc_receiver_found = 0;
+uint8_t _rc_receiver_curr_channel = 0;
+uint32_t* _rc_receiver_ecap_data;
+uint8_t result = 0;
+
+uint8_t rc_receiver_ecap_Init() {
     // Disabilito ed azzero interrupts
     CT_ECAP.ECEINT = 0x00;
     CT_ECAP.ECCTL2 &= EC_STOP_MSK; // Stop ecap
@@ -46,29 +52,29 @@ uint8_t ecap_Init() {
     CT_ECAP.ECCTL2 = ECCTL2_CFG & EC_STOP_MSK; // continuous, capture mode, wrap after capture 4, rearm, free running,synci/o disabled
     return 1;
 }
-uint8_t ecap_Start() {
+uint8_t rc_receiver_ecap_Start() {
     CT_ECAP.TSCTR = 0x00000000;
     CT_ECAP.ECCTL2 = ECCTL2_CFG; // start ecap
     return 1;
 
 }
-uint8_t ecap_Stop(){
+uint8_t rc_receiver_ecap_Stop(){
     CT_ECAP.ECCTL2 = ECCTL2_CFG & EC_STOP_MSK; // stop ecap
     return 1;
 
 }
 
-uint32_t* edma_get_Data() {
+uint32_t* rc_receiver_edma_get_Data() {
     return &FRAME_TO_TRANSFER[rc_receiver_ReadBufferIdx][0];
 }
 
-void edma_reset_Data() {
+void rc_receiver_switch_edma_Buffer() {
     rc_receiver_TmpBufferIdx = rc_receiver_ReadBufferIdx;
     rc_receiver_ReadBufferIdx = rc_receiver_WriteBufferIdx;
     rc_receiver_WriteBufferIdx = rc_receiver_TmpBufferIdx;
 }
 
-uint8_t edma_init_PaRAM() {
+uint8_t rc_receiver_edma_init_PaRAM() {
     // prepare PaRAM0 for Ecap
     (EDMA_PaRAM)->optBits.tcc = EDMA3CC_ECAP0_EVT; // event 1 as am335x datasheet table pag. 1540
     (EDMA_PaRAM)->optBits.tcinten = 1; // completion interrupt enabled
@@ -101,8 +107,8 @@ uint8_t edma_init_PaRAM() {
 
     return 1;
 }
-uint8_t edma_Init() {
-    if(!edma_init_PaRAM()) {
+uint8_t rc_receiver_edma_Init() {
+    if(!rc_receiver_edma_init_PaRAM()) {
         return 0;
     }
 
@@ -117,42 +123,62 @@ uint8_t edma_Init() {
     // Set Channel for Ecap
     CT_TCC.TCC_DCHMAP_bit[EDMA3CC_ECAP0_EVT].TCC_DCHMAP_PAENTRY = 0;
     CT_TCC.TCC_DMAQNUM_bit[0].TCC_DMAQNUM_E1 = 0; // coda 0 per channel ECAP0EVT
-    edma_registers_ptr[DRAE1] |= edma_channel_mask; // region 1 for ECAP0EVT channel
+    _edma_registers_ptr[DRAE1] |= _edma_channel_mask; // region 1 for ECAP0EVT channel
 //    CT_TCC.TCC_DRAE1 |= channelMask;
     // tratto da /hd/linuxlab/beagleboard/ti/pru-software-support-package/examples/am335x/PRU_edmaConfig'
 
     // clears
     /* Clear channel event from EDMA event registers */
-    edma_registers_ptr[SECR] |= edma_channel_mask;
-    edma_registers_ptr[ICR] |= edma_channel_mask;
+    _edma_registers_ptr[SECR] |= _edma_channel_mask;
+    _edma_registers_ptr[ICR] |= _edma_channel_mask;
 
     /* Enable channel interrupt */
-    edma_registers_ptr[IESR] |= edma_channel_mask;
+    _edma_registers_ptr[IESR] |= _edma_channel_mask;
 
     /* Enable channel */
-    edma_registers_ptr[EESR] |= edma_channel_mask;
+    _edma_registers_ptr[EESR] |= _edma_channel_mask;
 
     /* Clear event missed register */
-    CT_TCC.TCC_EMCR |= edma_channel_mask;
+    CT_TCC.TCC_EMCR |= _edma_channel_mask;
 
     return 1;
 }
+uint8_t rc_receiver_intc_Init() {
 
+    CT_INTC.CMR3_bit.CH_MAP_15 = INT_ECAP_CHAN;
+    CT_INTC.HMR2_bit.HINT_MAP_8 = INT_ECAP_HOST;
+    CT_INTC.HIER_bit.EN_HINT |= INT_ECAP_HOST; // enable host interrupt 8
+    CT_INTC.EISR_bit.EN_SET_IDX = INT_ECAP; // enable ecap interrupt
+    CT_INTC.GER_bit.EN_HINT_ANY = 1; // enable all host interrupt
+    return 1;
+}
 uint8_t rc_receiver_Init() {
-    return ecap_Init() & edma_Init();
+    return rc_receiver_intc_Init() && rc_receiver_ecap_Init() & rc_receiver_edma_Init();
+}
+void rc_receiver_clean_Interrupts() {
+    CT_ECAP.ECCLR |= ECCLR_MSK; // remove EVT1-EVT4 interrupts and INT
+    _edma_registers_ptr[ICR] = _edma_channel_mask; // reset completion interrupt
+
 }
 uint8_t rc_receiver_Start() {
-    ecap_Stop();
-    edma_reset_Data();
-    edma_init_PaRAM();
-    return ecap_Start();
+    result = rc_receiver_ecap_Stop();
+    rc_receiver_switch_edma_Buffer();
+    result &= rc_receiver_edma_init_PaRAM();
+    rc_receiver_clean_Interrupts();
+    return result & rc_receiver_ecap_Start();
 }
 uint8_t rc_receiver_Stop() {
-    ecap_Stop();
-    edma_reset_Data();
-    edma_init_PaRAM();
-    return 1;
+    result = rc_receiver_ecap_Stop();
+    result &= rc_receiver_edma_init_PaRAM();
+    rc_receiver_clean_Interrupts();
+    return result;
 }
+
+/* Check for New Data from RC
+ * TX not connected <=> rc_receiver_newData & RC_RECEIVER_TX_NOT_PRESENT
+ * New Data <=> rc_receiver_newData & RC_RECEIVER_TX_COMPLETE
+ * it is not idempotent
+ */
 uint8_t rc_receiver_PulseNewData() {
     uint8_t result = 0;
     if (CT_ECAP.ECFLG & 0x0002)
@@ -166,13 +192,45 @@ uint8_t rc_receiver_PulseNewData() {
         result = 2;
     }
 
-    result |= ((edma_registers_ptr[IPR] & edma_channel_mask) >> 1);
+    result |= ((_edma_registers_ptr[IPR] & _edma_channel_mask) >> 1);
     if(result) {
-        ecap_Stop();
-        edma_registers_ptr[ICR] = edma_channel_mask; // reset completion interrupt
-        edma_reset_Data();
-        edma_init_PaRAM();
-        ecap_Start();
+        rc_receiver_ecap_Stop();
+        rc_receiver_clean_Interrupts();
+        rc_receiver_switch_edma_Buffer();
+        rc_receiver_edma_init_PaRAM();
+        rc_receiver_ecap_Start();
     }
     return result;
 }
+
+void rc_receiver_extract_Data(uint32_t* rc_buffer)
+{
+    _rc_receiver_ecap_data = rc_receiver_edma_get_Data();
+
+    for (_rc_receiver_counter8 = 0; _rc_receiver_counter8 < NUM_EDMA_FRAME_BLOCK; _rc_receiver_counter8++)
+    {
+        if ((_rc_receiver_found == 0) && (_rc_receiver_ecap_data[_rc_receiver_counter8] > MAX_CHANNEL_CYCLES))
+        {
+            _rc_receiver_found = 1;
+        }
+        if (_rc_receiver_found == 1)
+        {
+            if (_rc_receiver_ecap_data[_rc_receiver_counter8] > MAX_PULSE_CYCLES)
+            {
+                if (_rc_receiver_ecap_data[_rc_receiver_counter8] > MAX_CHANNEL_CYCLES)
+                {
+                    _rc_receiver_curr_channel = 0;
+                }
+                rc_buffer[_rc_receiver_curr_channel] = _rc_receiver_ecap_data[_rc_receiver_counter8];
+                _rc_receiver_curr_channel++;
+            }
+        }
+        if (_rc_receiver_curr_channel > 8)
+        {
+            _rc_receiver_curr_channel = 0;
+            break;
+        }
+    }
+}
+
+
