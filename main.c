@@ -17,6 +17,25 @@
 #define COMPASS_SENSOR_NUM      1
 #define BAROMETER_SENSOR_NUM    2
 #define RC_SENSOR_NUM           3
+#define MPU_SENSOR_MASK         (1 << MPU_SENSOR_NUM)
+#define COMPASS_SENSOR_MASK     (1 << COMPASS_SENSOR_NUM)
+#define BAROMETER_SENSOR_MASK   (1 << BAROMETER_SENSOR_NUM)
+#define RC_SENSOR_MASK          (1 << RC_SENSOR_NUM)
+
+#define INT_P0_TO_P1_MASK       (1 << INT_P0_TO_P1)
+#define INT_P1_TO_P0_MASK       (1 << INT_P1_TO_P0)
+
+#define IS_ACTIVE(MSK)          (active_sensors & MSK)
+#define IS_INT_P0_TO_P1()       (CT_INTC.SECR0_bit.ENA_STS_31_0 & INT_P0_TO_P1_MASK)
+#define RECEIVE_MSG_FROM_P0()   {\
+                                  (CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1);\
+                                  __xin(SP_BANK_0, 3, 0, pru0_data);\
+                                }
+#define SEND_DATA_TO_P0(MSG_TYPE) {\
+                                    pru0_data_struct->message_type = MSG_TYPE;\
+                                    __xout(SP_BANK_1, 6, 0, pru0_data);\
+                                    (CT_INTC.SRSR0_bit.RAW_STS_31_0 |= (1 << INT_P1_TO_P0));\
+                                  }
 
 /*
  * Cycle Counter
@@ -38,6 +57,7 @@ uint32_t active_sensors = 0;
 uint8_t testConnectionOk = 0;
 uint8_t rc_receiver_newData = 0;
 uint8_t counter8 = 0;
+uint8_t main_result = 0;
 
 uint32_t BUFF_DEBUG[4] = { 0 };
 uint32_t RC_BUFFER[9] = { 0 };
@@ -48,13 +68,15 @@ uint32_t RC_BUFFER[9] = { 0 };
 //uint32_t* PWMSS_CTRL_REG = (uint32_t*) 0x44E10664;
 //uint32_t* ECAP_CTRL_PIN = (uint32_t*) 0x44E10964;
 
-inline uint8_t is_enabled_RC() {
+inline uint8_t is_enabled_RC()
+{
     return active_sensors & (1 << RC_SENSOR_NUM);
 }
 
 void enable_RC()
 {
-    if(!is_enabled_RC()) {
+    if (!is_enabled_RC())
+    {
         rc_receiver_Init();
         rc_receiver_Start();
         active_sensors |= (1 << RC_SENSOR_NUM);
@@ -63,29 +85,31 @@ void enable_RC()
 
 void disable_RC()
 {
-    if(is_enabled_RC()) {
+    if (is_enabled_RC())
+    {
         rc_receiver_Stop();
         active_sensors &= ~(1 << RC_SENSOR_NUM);
     }
 }
 
-inline uint32_t is_enabled_Barometer()
+inline uint8_t is_enabled_Barometer()
 {
     return active_sensors & (1 << BAROMETER_SENSOR_NUM);
 }
 
-inline uint32_t is_enabled_Compass()
+inline uint8_t is_enabled_Compass()
 {
     return active_sensors & (1 << COMPASS_SENSOR_NUM);
 }
 
-inline uint32_t is_enabled_MPU()
+inline uint8_t is_enabled_MPU()
 {
     return active_sensors & (1 << MPU_SENSOR_NUM);
 }
 void enable_MPU()
 {
-    if(!is_enabled_MPU()) {
+    if (!is_enabled_MPU())
+    {
         pru_mpu6050_driver_Initialize();
         active_sensors |= (1 << MPU_SENSOR_NUM);
     }
@@ -97,37 +121,7 @@ void disable_MPU()
     active_sensors &= ~(1 << MPU_SENSOR_NUM);
 }
 
-inline void send_interrupt_to_pru0()
-{
-    CT_INTC.SRSR0_bit.RAW_STS_31_0 |= (1 << INT_P1_TO_P0);
-}
-
-void send_data_to_pru0()
-{
-    __xout(SP_BANK_1, 6, 0, pru0_data);
-    send_interrupt_to_pru0();
-}
-
-uint8_t exists_new_message_from_pru0()
-{
-    if(CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << INT_P0_TO_P1)) {
-        return 1;
-    }
-    return 0;
-}
-
-uint8_t receive_data_from_pru0()
-{
-    uint8_t result = 0;
-    if(CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << INT_P0_TO_P1)) {
-        CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1;
-        __xin(SP_BANK_0, 3, 0, pru0_data);
-        result = 1;
-    }
-    return result;
-}
-
-void clean_rc_buffer()
+inline void clean_rc_buffer()
 {
     for (counter8 = 0; counter8 < 9; counter8++)
     {
@@ -137,14 +131,9 @@ void clean_rc_buffer()
 
 int main(void)
 {
-// TODO: eliminare. Assegnati già da PRU0
-    CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
     // clear interrupts
     CT_INTC.SICR_bit.STS_CLR_IDX = INT_P1_TO_P0;
     CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1;
-
-    CT_INTC.EISR_bit.EN_SET_IDX = INT_P0_TO_P1; // enable interrupt from PRU0
-    CT_INTC.EISR_bit.EN_SET_IDX = INT_P1_TO_P0;
 
     /*
      * Forzo RC attivo
@@ -161,30 +150,33 @@ int main(void)
         BUFF_DEBUG[1] = 0xF0;
 
         // Rules: ordered by priority
-        if(is_enabled_RC()) {
-            /* Check for New Data from RC
-             * TX not connected <=> rc_receiver_newData & RC_RECEIVER_TX_NOT_PRESENT
-             * New Data <=> rc_receiver_newData & RC_RECEIVER_TX_COMPLETE
-             */
-            if (rc_receiver_newData = rc_receiver_PulseNewData())
+        /* Check for New Data from RC
+         * TX not connected <=> rc_receiver_newData & RC_RECEIVER_TX_NOT_PRESENT
+         * New Data <=> rc_receiver_newData & RC_RECEIVER_TX_COMPLETE
+         */
+        if (IS_ACTIVE(RC_SENSOR_MASK)
+                && (rc_receiver_newData = rc_receiver_PulseNewData()))
+        {
+            // TODO: inviare l'intero buffer a pru0
+            if (rc_receiver_newData & RC_RECEIVER_TX_NOT_PRESENT)
             {
-                // TODO: inviare l'intero buffer a pru0
-                if(rc_receiver_newData & RC_RECEIVER_TX_NOT_PRESENT) {
-                    clean_rc_buffer();
-                } else {
-                    rc_receiver_extract_Data(RC_BUFFER);
-                }
+                clean_rc_buffer();
+            }
+            else
+            {
+                rc_receiver_extract_Data(RC_BUFFER);
             }
         }
-        else
+
         // receive message from PRU0
-        if (receive_data_from_pru0())
+        if (IS_INT_P0_TO_P1())
         {
+            RECEIVE_MSG_FROM_P0();
+
             switch (pru0_data_struct->message_type)
             {
             case MPU_ENABLE_MSG_TYPE:
             {
-                BUFF_DEBUG[0] = 0xFFFF;
                 enable_MPU();
                 break;
             }
@@ -206,20 +198,18 @@ int main(void)
             }
             // TODO: interpret message
         }
-        else if (is_enabled_Barometer())
+        else if (IS_ACTIVE(BAROMETER_SENSOR_MASK))
         {
             // TODO: read data from baro
             // TODO: send data to pru0
         }
-        else if (is_enabled_Compass())
+        else if (IS_ACTIVE(COMPASS_SENSOR_MASK))
         {
             // TODO: read data from compass
             // TODO: send data to pru0
         }
-        else if (is_enabled_MPU())
+        else if (IS_ACTIVE(MPU_SENSOR_MASK))
         {
-            BUFF_DEBUG[1] = 0xFFFF0000;
-
             // TODO: Inserire interrupt invece di leggere via i2c
             if (pru_mpu6050_driver_GetIntDataReadyStatus())
             {
@@ -231,8 +221,7 @@ int main(void)
                         &(pru0_data_struct->mpu_accel_gyro.gy),
                         &(pru0_data_struct->mpu_accel_gyro.gz));
 
-                pru0_data_struct->message_type = MPU_DATA_MSG_TYPE;
-                send_data_to_pru0();
+                SEND_DATA_TO_P0(MPU_DATA_MSG_TYPE);
             }
         }
     }

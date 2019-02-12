@@ -36,7 +36,7 @@ uint8_t _rc_receiver_counter8 = 0;
 uint8_t _rc_receiver_found = 0;
 uint8_t _rc_receiver_curr_channel = 0;
 uint32_t* _rc_receiver_ecap_data;
-uint8_t result = 0;
+uint8_t rc_receiver_result = 0;
 
 uint8_t rc_receiver_ecap_Init() {
     // Disabilito ed azzero interrupts
@@ -161,17 +161,17 @@ void rc_receiver_clean_Interrupts() {
 
 }
 uint8_t rc_receiver_Start() {
-    result = rc_receiver_ecap_Stop();
+    rc_receiver_result = rc_receiver_ecap_Stop();
     rc_receiver_switch_edma_Buffer();
-    result &= rc_receiver_edma_init_PaRAM();
+    rc_receiver_result &= rc_receiver_edma_init_PaRAM();
     rc_receiver_clean_Interrupts();
-    return result & rc_receiver_ecap_Start();
+    return rc_receiver_result & rc_receiver_ecap_Start();
 }
 uint8_t rc_receiver_Stop() {
-    result = rc_receiver_ecap_Stop();
-    result &= rc_receiver_edma_init_PaRAM();
+    rc_receiver_result = rc_receiver_ecap_Stop();
+    rc_receiver_result &= rc_receiver_edma_init_PaRAM();
     rc_receiver_clean_Interrupts();
-    return result;
+    return rc_receiver_result;
 }
 
 /* Check for New Data from RC
@@ -180,7 +180,7 @@ uint8_t rc_receiver_Stop() {
  * it is not idempotent
  */
 uint8_t rc_receiver_PulseNewData() {
-    uint8_t result = 0;
+    rc_receiver_result = 0;
     if (CT_ECAP.ECFLG & 0x0002)
     {
         CT_ECAP.ECCLR |= ECCLR_MSK; // remove EVT1-EVT4 interrupts and INT
@@ -189,18 +189,18 @@ uint8_t rc_receiver_PulseNewData() {
     if (CT_ECAP.ECFLG & 0x0020) // counter overflow
     {
         CT_ECAP.ECCLR |= ECCLR_MSK; // remove EVT1-EVT4 interrupts and INT
-        result = 2;
+        rc_receiver_result = 2;
     }
 
-    result |= ((_edma_registers_ptr[IPR] & _edma_channel_mask) >> 1);
-    if(result) {
+    rc_receiver_result |= ((_edma_registers_ptr[IPR] & _edma_channel_mask) >> 1);
+    if(rc_receiver_result) {
         rc_receiver_ecap_Stop();
         rc_receiver_clean_Interrupts();
         rc_receiver_switch_edma_Buffer();
         rc_receiver_edma_init_PaRAM();
         rc_receiver_ecap_Start();
     }
-    return result;
+    return rc_receiver_result;
 }
 
 void rc_receiver_extract_Data(uint32_t* rc_buffer)

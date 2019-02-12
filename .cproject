@@ -52,6 +52,7 @@
 									<listOptionValue builtIn="false" value="${CG_TOOL_ROOT}/include"/>
 								</option>
 								<option id="com.ti.ccstudio.buildDefinitions.PRU_2.2.compilerID.ENDIAN.1208488119" name="Specify the endianness of both code and data [See 'General' page to edit] (--endian)" superClass="com.ti.ccstudio.buildDefinitions.PRU_2.2.compilerID.ENDIAN" useByScannerDiscovery="false" value="com.ti.ccstudio.buildDefinitions.PRU_2.2.compilerID.ENDIAN.little" valueType="enumerated"/>
+								<option id="com.ti.ccstudio.buildDefinitions.PRU_2.2.compilerID.OPT_LEVEL.97238685" name="Optimization level (--opt_level, -O)" superClass="com.ti.ccstudio.buildDefinitions.PRU_2.2.compilerID.OPT_LEVEL" value="com.ti.ccstudio.buildDefinitions.PRU_2.2.compilerID.OPT_LEVEL.off" valueType="enumerated"/>
 								<inputType id="com.ti.ccstudio.buildDefinitions.PRU_2.2.compiler.inputType__C_SRCS.693693094" name="C Sources" superClass="com.ti.ccstudio.buildDefinitions.PRU_2.2.compiler.inputType__C_SRCS"/>
 								<inputType id="com.ti.ccstudio.buildDefinitions.PRU_2.2.compiler.inputType__CPP_SRCS.1209108140" name="C++ Sources" superClass="com.ti.ccstudio.buildDefinitions.PRU_2.2.compiler.inputType__CPP_SRCS"/>
 								<inputType id="com.ti.ccstudio.buildDefinitions.PRU_2.2.compiler.inputType__ASM_SRCS.894105060" name="Assembly Sources" superClass="com.ti.ccstudio.buildDefinitions.PRU_2.2.compiler.inputType__ASM_SRCS"/>
