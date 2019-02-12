@@ -119,9 +119,10 @@ uint8_t exists_new_message_from_pru0()
 uint8_t receive_data_from_pru0()
 {
     uint8_t result = 0;
-    if(result = exists_new_message_from_pru0()) {
+    if(CT_INTC.SECR0_bit.ENA_STS_31_0 & (1 << INT_P0_TO_P1)) {
         CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1;
         __xin(SP_BANK_0, 3, 0, pru0_data);
+        result = 1;
     }
     return result;
 }
@@ -137,13 +138,13 @@ void clean_rc_buffer()
 int main(void)
 {
 // TODO: eliminare. Assegnati già da PRU0
-//    CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
-//    // clear interrupts
-//    CT_INTC.SICR_bit.STS_CLR_IDX = INT_P1_TO_P0;
-//    CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1;
-//
-//    CT_INTC.EISR_bit.EN_SET_IDX = INT_P0_TO_P1; // enable interrupt from PRU0
-//    CT_INTC.EISR_bit.EN_SET_IDX = INT_P1_TO_P0;
+    CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
+    // clear interrupts
+    CT_INTC.SICR_bit.STS_CLR_IDX = INT_P1_TO_P0;
+    CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1;
+
+    CT_INTC.EISR_bit.EN_SET_IDX = INT_P0_TO_P1; // enable interrupt from PRU0
+    CT_INTC.EISR_bit.EN_SET_IDX = INT_P1_TO_P0;
 
     /*
      * Forzo RC attivo
@@ -156,8 +157,8 @@ int main(void)
 
     while (1)
     {
-        BUFF_DEBUG[0] = 1;
-        BUFF_DEBUG[1] = 2;
+        BUFF_DEBUG[0] = 0xF;
+        BUFF_DEBUG[1] = 0xF0;
 
         // Rules: ordered by priority
         if(is_enabled_RC()) {
@@ -183,6 +184,7 @@ int main(void)
             {
             case MPU_ENABLE_MSG_TYPE:
             {
+                BUFF_DEBUG[0] = 0xFFFF;
                 enable_MPU();
                 break;
             }
@@ -216,6 +218,8 @@ int main(void)
         }
         else if (is_enabled_MPU())
         {
+            BUFF_DEBUG[1] = 0xFFFF0000;
+
             // TODO: Inserire interrupt invece di leggere via i2c
             if (pru_mpu6050_driver_GetIntDataReadyStatus())
             {
