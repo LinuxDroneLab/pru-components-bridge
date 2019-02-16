@@ -28,6 +28,7 @@ uint32_t FRAME_TO_TRANSFER[2][NUM_EDMA_FRAME_BLOCK] = { 0 };
 uint8_t rc_receiver_ReadBufferIdx = 0;
 uint8_t rc_receiver_WriteBufferIdx = 1;
 uint8_t rc_receiver_TmpBufferIdx = 0;
+uint8_t rc_receiver_Tmp = 0;
 
 // variables
 volatile uint32_t *_edma_registers_ptr = EDMA0_CC_BASE;
@@ -44,7 +45,7 @@ uint8_t rc_receiver_ecap_Init() {
     CT_ECAP.ECCTL2 &= EC_STOP_MSK; // Stop ecap
     CT_ECAP.ECCLR = ECCLR_MSK; // clear interrupts
 
-    // Enable interrupt at EVT1
+    // Enable interrupt at EVT4
     CT_ECAP.ECEINT = ECEINT_CFG;
 
     // Configure & start ecap
@@ -184,16 +185,18 @@ uint8_t rc_receiver_PulseNewData() {
     if (CT_ECAP.ECFLG & 0x0002)
     {
         CT_ECAP.ECCLR |= ECCLR_MSK; // remove EVT1-EVT4 interrupts and INT
+        rc_receiver_result = 4;
     }
-    else
     if (CT_ECAP.ECFLG & 0x0020) // counter overflow
     {
         CT_ECAP.ECCLR |= ECCLR_MSK; // remove EVT1-EVT4 interrupts and INT
-        rc_receiver_result = 2;
+        rc_receiver_result |= 2;
     }
 
-    rc_receiver_result |= ((_edma_registers_ptr[IPR] & _edma_channel_mask) >> 1);
-    if(rc_receiver_result) {
+    if(_edma_registers_ptr[IPR] & _edma_channel_mask) {
+        rc_receiver_result |= 1;
+    }
+    if(rc_receiver_result & 0x3) {
         rc_receiver_ecap_Stop();
         rc_receiver_clean_Interrupts();
         rc_receiver_switch_edma_Buffer();
@@ -203,10 +206,15 @@ uint8_t rc_receiver_PulseNewData() {
     return rc_receiver_result;
 }
 
-void rc_receiver_extract_Data(uint32_t* rc_buffer)
+uint8_t rc_receiver_extract_Data(uint32_t* rc_buffer)
 {
     _rc_receiver_ecap_data = rc_receiver_edma_get_Data();
-
+    for (_rc_receiver_counter8 = 0; _rc_receiver_counter8 < 9; _rc_receiver_counter8++)
+    {
+        _rc_receiver_ecap_data[_rc_receiver_counter8] = 0;
+    }
+    _rc_receiver_found = 0;
+    _rc_receiver_curr_channel = 0;
     for (_rc_receiver_counter8 = 0; _rc_receiver_counter8 < NUM_EDMA_FRAME_BLOCK; _rc_receiver_counter8++)
     {
         if ((_rc_receiver_found == 0) && (_rc_receiver_ecap_data[_rc_receiver_counter8] > MAX_CHANNEL_CYCLES))
@@ -224,13 +232,18 @@ void rc_receiver_extract_Data(uint32_t* rc_buffer)
                 rc_buffer[_rc_receiver_curr_channel] = _rc_receiver_ecap_data[_rc_receiver_counter8];
                 _rc_receiver_curr_channel++;
             }
-        }
-        if (_rc_receiver_curr_channel > 8)
-        {
-            _rc_receiver_curr_channel = 0;
-            break;
+            if (_rc_receiver_curr_channel > 8)
+            {
+                if((_rc_receiver_counter8 + 2 < NUM_EDMA_FRAME_BLOCK) && (_rc_receiver_ecap_data[_rc_receiver_counter8 + 2] > MAX_CHANNEL_CYCLES)) {
+                    break;
+                } else {
+                    _rc_receiver_found = 0;
+                }
+
+            }
         }
     }
+    return _rc_receiver_found && (_rc_receiver_curr_channel > 8);
 }
 
 

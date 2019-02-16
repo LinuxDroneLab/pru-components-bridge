@@ -162,24 +162,23 @@ int main(void)
             {
                 clean_rc_buffer();
             }
-            else
+            else if(rc_receiver_newData & RC_RECEIVER_TX_COMPLETE)
             {
-                rc_receiver_extract_Data(RC_BUFFER);
-                pru0_data_struct->rc.throttle = RC_BUFFER[2];
-                pru0_data_struct->rc.yaw = RC_BUFFER[4];
-                pru0_data_struct->rc.pitch = RC_BUFFER[5];
-                pru0_data_struct->rc.roll = RC_BUFFER[3];
-                pru0_data_struct->rc.aux1 = RC_BUFFER[6];
-                pru0_data_struct->rc.aux2 = RC_BUFFER[7];
-                pru0_data_struct->rc.aux3 = RC_BUFFER[1];
-                pru0_data_struct->rc.aux4 = RC_BUFFER[8];
-                SEND_DATA_TO_P0(RC_DATA_MSG_TYPE);
-
+                if(rc_receiver_extract_Data(RC_BUFFER)) {
+                    pru0_data_struct->rc.throttle = RC_BUFFER[2];
+                    pru0_data_struct->rc.yaw      = RC_BUFFER[4];
+                    pru0_data_struct->rc.pitch    = RC_BUFFER[3];
+                    pru0_data_struct->rc.roll     = RC_BUFFER[1];
+                    pru0_data_struct->rc.aux1     = RC_BUFFER[6];
+                    pru0_data_struct->rc.aux2     = RC_BUFFER[5];
+                    pru0_data_struct->rc.aux3     = RC_BUFFER[7];
+                    pru0_data_struct->rc.aux4     = RC_BUFFER[8];
+                    SEND_DATA_TO_P0(RC_DATA_MSG_TYPE);
+                }
             }
         }
-
         // receive message from PRU0
-        if (IS_INT_P0_TO_P1())
+        else if (IS_INT_P0_TO_P1())
         {
             RECEIVE_MSG_FROM_P0();
 
@@ -230,7 +229,6 @@ int main(void)
                         &(pru0_data_struct->mpu_accel_gyro.gx),
                         &(pru0_data_struct->mpu_accel_gyro.gy),
                         &(pru0_data_struct->mpu_accel_gyro.gz));
-
                 SEND_DATA_TO_P0(MPU_DATA_MSG_TYPE);
             }
         }

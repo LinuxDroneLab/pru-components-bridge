@@ -22,7 +22,7 @@ uint8_t rc_receiver_intc_Init();
  ********************/
 #define ECCTL1_CFG          0xC1EE /* DIV1,ENABLED,DELTA_MODE, RISING/FALLING */
 #define ECCTL2_CFG          0x00DE /* RE-ARM, ECAP_MODE, RUN, SYNCO/I DISABLED, CONTINUOUS */
-#define ECEINT_CFG          0x0002 /* EVT1 interrupt enabled */
+#define ECEINT_CFG          0x0010 /* EVT4 interrupt enabled */
 #define ECCLR_MSK           0x00FF /* clear all */
 #define EC_STOP_MSK         0xFFEF /* mask stop ecap */
 #define MAX_PULSE_CYCLES    70000
@@ -74,6 +74,7 @@ void      rc_receiver_switch_edma_Buffer();
 /**************************
  * RC RECEIVER DEFINITIONS
  **************************/
+#define RC_RECEIVER_TX_EVT         0x4
 #define RC_RECEIVER_TX_NOT_PRESENT 0x2
 #define RC_RECEIVER_TX_COMPLETE    0x1
 
@@ -82,6 +83,6 @@ void    rc_receiver_clean_Interrupts();
 uint8_t rc_receiver_Start();
 uint8_t rc_receiver_Stop();
 uint8_t rc_receiver_PulseNewData();
-void    rc_receiver_extract_Data(uint32_t* rc_buffer);
+uint8_t    rc_receiver_extract_Data(uint32_t* rc_buffer);
 
 #endif /* _RC_RECEIVER_H_ */
