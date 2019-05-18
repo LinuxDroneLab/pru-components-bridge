@@ -77,7 +77,6 @@ void enable_RC()
 {
     if (!is_enabled_RC())
     {
-        rc_receiver_Init();
         rc_receiver_Start();
         active_sensors |= (1 << RC_SENSOR_NUM);
     }
@@ -135,10 +134,8 @@ int main(void)
     CT_INTC.SICR_bit.STS_CLR_IDX = INT_P1_TO_P0;
     CT_INTC.SICR_bit.STS_CLR_IDX = INT_P0_TO_P1;
 
-    /*
-     * Forzo RC attivo
-     */
-    enable_RC();
+    // init rc
+    rc_receiver_Init();
 
     // TODO: gestire multiple istanze mpu e su canali i2c differenti
     uint8_t i2cInit = pru_i2c_driver_Init(2);
@@ -154,8 +151,7 @@ int main(void)
          * TX not connected <=> rc_receiver_newData & RC_RECEIVER_TX_NOT_PRESENT
          * New Data <=> rc_receiver_newData & RC_RECEIVER_TX_COMPLETE
          */
-        if (IS_ACTIVE(RC_SENSOR_MASK)
-                && (rc_receiver_newData = rc_receiver_PulseNewData()))
+        if (IS_ACTIVE(RC_SENSOR_MASK) && (rc_receiver_newData = rc_receiver_PulseNewData()))
         {
             // TODO: inviare l'intero buffer a pru0
             if (rc_receiver_newData & RC_RECEIVER_TX_NOT_PRESENT)
